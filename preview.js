@@ -1,80 +1,169 @@
 /**
  * ==========================================================================
- * ENTERPRISE PREVIEW ENGINE - preview.js
- * Optimized for High-Performance UI Updates (UK, USA, Australia)
+ * ENTERPRISE PREVIEW ENGINE v2.0 - preview.js
+ * Optimized for McKinsey/BCG Grade Aesthetic & Performance
  * ==========================================================================
  */
 
 import { formatMoney } from './calculations.js';
 
-// Global cache to prevent expensive DOM querying on every keystroke
-const domCache = new Map();
-
-const getCachedElement = (id) => {
-    if (!domCache.has(id)) {
-        domCache.set(id, document.getElementById(id));
+// 1. HIGH-PERFORMANCE DOM CACHE
+// Prevents redundant DOM lookups to ensure 60FPS UI updates
+const PreviewCache = {
+    elements: new Map(),
+    get(id) {
+        if (!this.elements.has(id)) {
+            const el = document.getElementById(id);
+            if (el) this.elements.set(id, el);
+        }
+        return this.elements.get(id);
     }
-    return domCache.get(id);
-};
-
-export const renderList = (textId, listId, wrapId) => {
-  const textEl = getCachedElement(textId);
-  const wrap = getCachedElement(wrapId);
-  const list = getCachedElement(listId);
-  
-  if (!textEl || !wrap || !list) return;
-  
-  const text = textEl.value;
-  if (text.trim()) { 
-    wrap.style.display = 'block'; 
-    list.innerHTML = text.replace(/\n/g, '<br>'); 
-  } else { 
-    wrap.style.display = 'none'; 
-  }
 };
 
 /**
- * Enterprise Preview Update Engine
- * @param {Object} cache - UI Element references
- * @param {Object} state - Current invoice state
- * @param {Function} sanitize - The security sanitization function
+ * Enterprise List Renderer
+ * Transforms raw text into structured HTML blocks with professional spacing.
+ */
+const renderProfessionalList = (rawText, targetId, wrapperId) => {
+    const listEl = PreviewCache.get(targetId);
+    const wrapEl = PreviewCache.get(wrapperId);
+    
+    if (!listEl || !wrapEl) return;
+
+    const cleanText = rawText ? rawText.trim() : "";
+    if (cleanText) {
+        wrapEl.style.display = 'flex'; // Use flex to maintain vertical alignment in cards
+        // Split by newlines and wrap in spans for better CSS control
+        listEl.innerHTML = cleanText.split('\n')
+            .map(line => `<div style="margin-bottom: 4px;">${line}</div>`)
+            .join('');
+    } else {
+        wrapEl.style.display = 'none';
+    }
+};
+
+/**
+ * Main Enterprise Preview Orchestrator
+ * Maps application state to the A4 Virtual DOM with extreme precision.
  */
 export const updatePreview = (cache, state, sanitize) => {
-  // 1. Bulk Update Bindings
-  document.querySelectorAll('[data-bind]').forEach(el => {
-    const key = el.getAttribute('data-bind');
-    if(['notes', 'terms', 'bankDetails', 'payUrl', 'payMethod'].includes(key)) return;
-    
-    document.querySelectorAll(`[id^="prev${key.charAt(0).toUpperCase() + key.slice(1)}"]`).forEach(target => {
-      // Enterprise Security: Always sanitize input before DOM injection
-      if(el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') target.textContent = sanitize(el.value);
-      else target.innerHTML = sanitize(el.value);
+    if (!state || !cache) return;
+
+    // 1. SMART BINDING: Synchronize all [data-bind] fields
+    document.querySelectorAll('[data-bind]').forEach(sourceEl => {
+        const key = sourceEl.getAttribute('data-bind');
+        // Skip specialized blocks handled separately
+        if(['notes', 'terms', 'bankDetails', 'payUrl', 'payMethod'].includes(key)) return;
+
+        const targetId = `prev${key.charAt(0).toUpperCase() + key.slice(1)}`;
+        const targetEl = PreviewCache.get(targetId);
+        
+        if (targetEl) {
+            const val = sourceEl.value || "";
+            // Handle different element types for multi-target binding
+            if (sourceEl.tagName === 'TEXTAREA') {
+                targetEl.style.whiteSpace = 'pre-wrap';
+                targetEl.textContent = sanitize(val);
+            } else {
+                targetEl.textContent = sanitize(val);
+            }
+        }
     });
-  });
 
-  // 2. Optimized Currency Calculations (Cross-referenced with calculations.js)
-  const subtotal = state.items.reduce((acc, item) => acc + (item.price * item.qty), 0);
-  let d = parseFloat(cache.discountVal?.value) || 0, 
-      tR = parseFloat(cache.taxRate?.value) || 0, 
-      s = parseFloat(cache.shippingCost?.value) || 0;
-      
-  let taxAmt = (subtotal - d) * (tR / 100); 
-  let gTotal = (subtotal - d) + taxAmt + s;
+    // 2. DYNAMIC ITEM TABLE RENDERING
+    const itemsBody = PreviewCache.get('prevItemsBody');
+    if (itemsBody && state.items) {
+        itemsBody.innerHTML = state.items.map((item, idx) => `
+            <tr>
+                <td style="text-align:center; font-weight: 500; color: #94a3b8;">${idx + 1}</td>
+                <td style="font-weight: 600; color: #1e293b;">${sanitize(item.desc || 'New Item')}</td>
+                <td style="text-align:center;">${item.qty || 0}</td>
+                <td style="text-align:right;">${formatMoney(item.price || 0, cache.currencySelect?.value)}</td>
+                <td style="text-align:right; font-weight: 700; color: var(--receipt-theme-color);">
+                    ${formatMoney((item.price || 0) * (item.qty || 0), cache.currencySelect?.value)}
+                </td>
+            </tr>
+        `).join('');
+    }
 
-  // 3. Conditional Visibility Engine
-  const updateDisplay = (id, val, condition) => {
-      const el = getCachedElement(id);
-      if(el) el.style.display = condition ? 'flex' : 'none';
-  };
+    // 3. FINANCIAL CALCULATIONS ENGINE
+    const subtotal = state.items.reduce((acc, i) => acc + (parseFloat(i.price || 0) * parseFloat(i.qty || 0)), 0);
+    const disc = parseFloat(cache.discountVal?.value) || 0;
+    const tRate = parseFloat(cache.taxRate?.value) || 0;
+    const ship = parseFloat(cache.shippingCost?.value) || 0;
+    
+    const taxAmt = (subtotal - disc) * (tRate / 100);
+    const grandTotal = (subtotal - disc) + taxAmt + ship;
 
-  updateDisplay('rowDiscount', d > 0, d > 0);
-  updateDisplay('rowTax', taxAmt > 0, taxAmt > 0);
-  updateDisplay('rowShipping', s > 0, s > 0);
+    // Batch Update Totals
+    const updateFinancial = (id, value, condition = true) => {
+        const el = PreviewCache.get(id);
+        const row = el?.closest('.preview-totals-row');
+        if (el) el.textContent = formatMoney(value, cache.currencySelect?.value);
+        if (row) row.style.display = condition ? 'flex' : 'none';
+    };
 
-  if(cache.prevSubtotal) cache.prevSubtotal.textContent = formatMoney(subtotal, cache.currencySelect?.value);
-  if(cache.prevTotal) cache.prevTotal.textContent = formatMoney(gTotal, cache.currencySelect?.value);
-  
-  // 4. Branding & Localization Labels
-  if(cache.prevTaxLabel && cache.taxLabelInput) cache.prevTaxLabel.textContent = cache.taxLabelInput.value || 'Tax';
-  if(cache.prevBizContact) cache.prevBizContact.innerHTML = [sanitize(cache.bizPhone?.value), sanitize(cache.bizEmail?.value)].filter(Boolean).join(' | ');
+    updateFinancial('prevSubtotal', subtotal);
+    updateFinancial('prevDiscount', disc, disc > 0);
+    updateFinancial('prevTax', taxAmt, taxAmt > 0);
+    updateFinancial('prevShipping', ship, ship > 0);
+    updateFinancial('prevTotal', grandTotal);
+
+    // Update Tax Label dynamically
+    const taxLabel = PreviewCache.get('prevTaxLabel');
+    if (taxLabel && cache.taxLabelInput) taxLabel.textContent = cache.taxLabelInput.value || 'Tax';
+
+    // 4. BENTO-GRID BOTTOM SECTION LOGIC
+    // Conditional visibility for specialized enterprise modules
+    renderProfessionalList(cache.notes?.value, 'prevNotesList', 'wrapNotes');
+    renderProfessionalList(cache.terms?.value, 'prevTermsList', 'wrapTerms');
+    
+    // Bank Details & Payment Link
+    const bankWrap = PreviewCache.get('wrapPayment');
+    const bankText = PreviewCache.get('prevBankDetails');
+    const payUrl = PreviewCache.get('prevPayUrl');
+    
+    const hasBank = !!cache.bankDetails?.value.trim();
+    const hasPayUrl = !!cache.payUrl?.value.trim();
+
+    if (bankWrap) bankWrap.style.display = (hasBank || hasPayUrl) ? 'flex' : 'none';
+    if (bankText) bankText.textContent = sanitize(cache.bankDetails?.value || "");
+    if (payUrl) {
+        payUrl.textContent = hasPayUrl ? sanitize(cache.payUrl.value) : "";
+        payUrl.href = hasPayUrl ? cache.payUrl.value : "#";
+        payUrl.style.display = hasPayUrl ? 'block' : 'none';
+    }
+
+    // QR Code Logic
+    const qrWrap = PreviewCache.get('wrapQr');
+    if (qrWrap) qrWrap.style.display = state.qrData ? 'flex' : 'none';
+    if (cache.prevQr && state.qrData) cache.prevQr.src = state.qrData;
+
+    // 5. BRANDING & VISUAL IDENTITY
+    if (cache.prevBizContact) {
+        const phone = sanitize(cache.bizPhone?.value || "");
+        const email = sanitize(cache.bizEmail?.value || "");
+        cache.prevBizContact.innerHTML = [phone, email].filter(Boolean).join(' <span style="color:#cbd5e1; margin:0 8px;">|</span> ');
+    }
+
+    // Logo & Signature Handling
+    if (cache.prevLogo) {
+        const logoPlaceholder = document.getElementById('logoPlaceholder');
+        if (state.logoData) {
+            cache.prevLogo.src = state.logoData;
+            cache.prevLogo.style.display = 'block';
+            if (logoPlaceholder) logoPlaceholder.style.display = 'none';
+        } else {
+            cache.prevLogo.style.display = 'none';
+            if (logoPlaceholder) logoPlaceholder.style.display = 'flex';
+        }
+    }
+
+    if (cache.prevSig) {
+        cache.prevSig.src = state.sigData || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'></svg>";
+        cache.prevSig.style.opacity = state.sigData ? '1' : '0';
+    }
+
+    // Final Sync: Broadcase render completion for PDF engine
+    document.dispatchEvent(new CustomEvent('previewRenderComplete'));
 };
